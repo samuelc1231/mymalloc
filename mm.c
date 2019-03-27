@@ -135,16 +135,21 @@ static void printblock(void *bp);
  *    pointer to this list
  */
 int
-find_list(size_t size)
+find_list(size_t size, int bucket_flag)
 {
     unsigned int bucket_size;
 	int i;
-	for(i = 0; i < 9; i++) {
+	for(i = 9; i > 0; i--) {
 	        bucket_size  = (unsigned int) (pow(2, i+4));
 			printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
-		if (size <= bucket_size) {
-				printf("FINDLIST - found i %i ", i);
-		        return i;
+		if (size >= bucket_size) {
+				printf("FINDLIST - found i %i ", i + 1);
+				if (bucket_flag) {
+					return (unsigned int) (pow(2, (i + 1) +4));
+				} else {
+		        	return i + 1;
+				}
+				
 		}
 	}
 	return (9);
@@ -164,7 +169,7 @@ void
 insert_free(size_t asize, void *bp) 
 {
         struct free_block *first;
-        int idx = find_list(asize); 
+        int idx = find_list(asize, 0); 
 	//printf("called insert on block of size = %d, index = %d \n", idx, (int) asize);
 	/* 
 	 *  Insert block at start of  appropriately sized explicit 
@@ -207,7 +212,7 @@ remove_free(void *bp)
 	struct free_block *current = (struct free_block *) bp;
 
 	printf("block to be removed size: %i", (int) GET_SIZE(HDRP(current)));
-	printf("block to be removed list: %i", (int) find_list(GET_SIZE(HDRP(current))));
+	printf("block to be removed list: %i", (int) find_list(GET_SIZE(HDRP(current)), 0));
 
 	
 	if (current->prev == NULL) {
@@ -462,7 +467,7 @@ coalesce(void *bp)
 		return (bp);
 
 	} else {                                      
-		int idx = find_list(size);
+		int idx = find_list(size, 0);
 		/*int nbr_idx = find_list(next_size);
 	        int prev_idx = find_list(prev_size);
 		struct free_block *current;
@@ -470,7 +475,7 @@ coalesce(void *bp)
 		*/
 		if (prev_alloc && !next_alloc) {        /* Case 2 */  
 		  printf("case 2 \n");
-		        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 			remove_free(NEXT_BLKP(bp));
 			/*for (current = free_listp[nbr_idx]; current !=  NULL; 
 			     current =  current->next) {
@@ -502,7 +507,7 @@ coalesce(void *bp)
 			*/
 			PUT(HDRP(bp), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-			int new_idx = find_list(size);
+			int new_idx = find_list(size, 0);
 			if (idx != new_idx) {
 			        remove_free(bp);
 				insert_free(size, bp);
@@ -525,27 +530,23 @@ coalesce(void *bp)
 
 		} else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		  printf("case 3 \n");
-		        size_t prev_size = GET_SIZE(HDRP(PREV_BLKP(bp))); /*FTPR?*/
-		        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-			 /*if (free_listp[idx]->next != NULL) {
-			  free_listp[idx]->next->prev = NULL;
-				free_listp[idx] = free_listp[idx]->next;
-			  
+			size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+
+			// If the size of the coalesced unit worth coalescing, coalesce and reassign
+			if ((int) size > find_list(size, 1)) {
+				printf("%i, %i", (int) size, find_list(size, 1));
+				remove_free(PREV_BLKP(bp));
+				PUT(FTRP(bp), PACK(size, 0));
+				PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+
+				bp = PREV_BLKP(bp);
+				insert_free(size, bp);
+			} else {
+				insert_free(size - GET_SIZE(HDRP(PREV_BLKP(bp))) , bp);
 			}
-			else {
-			        free_listp[idx] = NULL;
+
 			}
-			 */
-			remove_free(PREV_BLKP(bp));
-			PUT(FTRP(bp), PACK(size, 0));
-			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-			insert_free(size, bp);
-			
-			}
-			else {
-			  bp = PREV_BLKP(bp);
-			}
-			
+	
 				/*if (free_listp[new_idx] == NULL) {
 				        free_listp[new_idx] = (struct free_block *) bp;
 				        free_listp[new_idx]-> next = NULL;
@@ -560,7 +561,7 @@ coalesce(void *bp)
 					free_listp[new_idx] = first;
 				} 
 				*/
-		} else {                                        /* Case 4 */
+		 else {                                        /* Case 4 */
 		  printf("case 4 \n");
 			size_t prev_size = GET_SIZE(HDRP(PREV_BLKP(bp)));
 		        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
@@ -601,7 +602,7 @@ coalesce(void *bp)
 			*/
 			remove_free(NEXT_BLKP(bp));
 
-			if (find_list(prev_size) != find_list(size)) {
+			if (find_list(prev_size, 0) != find_list(size, 0)) {
 			        remove_free(PREV_BLKP(bp));
 			  /*int new_idx = find_list(size);
 				for (current = free_listp[prev_idx]; current !=  NULL; current = 
@@ -715,7 +716,7 @@ find_fit(size_t asize)
   //void *bp;
     struct free_block *current;
 	printf("FIND FIT\n");
-	int idx = find_list(asize);
+	int idx = find_list(asize, 0);
 
 	// What if a free list is empty? 
 	// if (free_listp[idx] == NULL) {
