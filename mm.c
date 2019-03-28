@@ -115,7 +115,7 @@ static        char       *heap_listp; /* Pointer to first block after free list 
 static void *coalesce(void *bp);
 static void *extend_heap(size_t words); 
 static void *find_fit(size_t asize);
-static void place(void *bp, size_t asize);
+static void place(void *bp, size_t asize, bool remove_flag);
 
 /* Function prototypes for heap consistency checker routines: */
 static void checkblock(void *bp);
@@ -311,7 +311,7 @@ mm_init(void)
 void *
 mm_malloc(size_t size) 
 {
-  
+
 	size_t asize;      /* Adjusted block size */
 	size_t extendsize; /* Amount to extend heap if no fit */
 	void *bp;
@@ -331,7 +331,7 @@ mm_malloc(size_t size)
 	// printf("Need Size: %i\n",(int) asize);
 
 	if ((bp = find_fit(asize)) != NULL) {
-		place(bp, asize);
+		place(bp, asize, 1);
 		// printf("malloced pointer %p, %i \n", bp, (int) asize);
 		return (bp);
 	}
@@ -342,7 +342,7 @@ mm_malloc(size_t size)
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL) {
 		return (NULL);
 	}
-	place(bp, asize);
+	place(bp, asize, 0);
 	return (bp);
 } 
 
@@ -391,16 +391,18 @@ mm_realloc(void *ptr, size_t size)
 {	
 	// size_t expandsize;
 	size_t oldsize;
-	void *newptr;
+	size_t asize;
+
+	void *newptr = NULL;
+	
 	// struct free_block *current;
 
-	newptr = ptr;
 	oldsize = GET_SIZE(HDRP(ptr));
-	// expandsize = oldsize;
-
-	printf("size: %i\n", (int) size);
-	printf("oldsize: %i\n", (int) oldsize);
-	printf("pointer: %p", ptr);
+	/* Adjust block size to include overhead and alignment reqs. */
+	if (size <= DSIZE)
+		asize = 2 * DSIZE;
+	else
+		asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
 
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
@@ -414,57 +416,30 @@ mm_realloc(void *ptr, size_t size)
 	// If not, we're going to look for a (opt) new home for our block. 
 	} else { 
 		// If we are looking for a smaller size, split or stay.
-		if (size <= oldsize) {
-			void *next_ptr;
-			printf("smaller unit");
+		if (asize <= oldsize) {
+			// void *next_ptr;
 			// Made payload smaller, take internal fragmentation
-			PUT(HDRP(ptr), PACK(size, 1));
-			PUT(FTRP(ptr), PACK(size, 1));
-			if ((oldsize - size) >= (2 * DSIZE)) {
-				next_ptr = NEXT_BLKP(ptr);
-				insert_free((oldsize - size), next_ptr);
-				
-				PUT(HDRP(next_ptr), PACK(oldsize - size, 0));
-				PUT(FTRP(next_ptr), PACK(oldsize - size, 0));
-			}
+			return ptr;
 			
 		// If we are looking for a larger block, expand or relocate.
+		} else if (GET_SIZE(HDRP(NEXT_BLKP(ptr))) == 0) {
+					printf("next block size %i, need to expand\n", (int) GET_SIZE(HDRP(NEXT_BLKP(ptr))));
+
+					extend_heap((asize - oldsize) / WSIZE);
+					PUT(HDRP(ptr), PACK(asize, 1));
+					PUT(FTRP(ptr), PACK(asize, 1));
+					return ptr;
 		} else {
-			// current = ptr;
-			// while (current->next != NULL) {
-			// 	expandsize += GET_SIZE(HDRP(current)); 
-			// 	if (expandsize >= size) {
-			// 		PUT(HDRP(ptr), PACK(size, 1));
-			// 		PUT(FTRP(ptr), PACK(size, 1));
-			// 	}
-			// }
-			printf("larger unit\n");
-
-			if (NEXT_BLKP(ptr) != NULL && !GET_ALLOC(HDRP(NEXT_BLKP(ptr)))) {
-				printf("getting here\n");
-				printf("combined size %i\n", (int) (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr)))));
-
-				if (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr))) >= size) {
-					printf("combined size %i", (int) (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr)))));
-					PUT(HDRP(ptr), PACK(size, 1));
-					PUT(FTRP(ptr), PACK(size, 1));
-				} 
-			} else {
-				printf("need to move\n");
 				newptr = mm_malloc(size);
-				if (size < oldsize)
-					oldsize = size;
+				
 				memcpy(newptr, ptr, oldsize);
 				mm_free(ptr);
-				printf("new pointer! %p\n", newptr);
 				return (newptr);
-
 			}
 			
 		}
 
 	}
-return (newptr);
 	
 
 	// newptr = mm_malloc(size);
@@ -483,7 +458,7 @@ return (newptr);
 	// mm_free(ptr);
 
 	// return (newptr);
-};
+
 
 /*
  * The following routines are internal helper routines.
@@ -506,9 +481,12 @@ coalesce(void *bp)
 		
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
+			//   printf("case 1 \n");
+
 	  	insert_free(size, bp);
 		return (bp);
 	} else if (prev_alloc && !next_alloc) {        /* Case 2 */  
+
 			remove_free(NEXT_BLKP(bp));
 
 		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
@@ -578,7 +556,7 @@ extend_heap(size_t words)
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
 
 	/* Coalesce if the previous block was free. */
-	return coalesce(bp);
+	return bp;
 }
 
 /*
@@ -632,27 +610,29 @@ find_fit(size_t asize)
  *   size. 
  */
 static void
-place(void *bp, size_t asize)
+place(void *bp, size_t asize, bool remove_flag)
 {
 //   printf("called place \n");
 	size_t csize = GET_SIZE(HDRP(bp)); 
 
+	if (remove_flag)
+		remove_free(bp);
+
 	if ((csize - asize) >= (2 * DSIZE)) { 
 	  //struct free_block *first;
 	  	// printf("splitting with size %i\n", (int) csize);
-	    remove_free(bp);
 		// printf("Inserted block = %p", bp);
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		bp = NEXT_BLKP(bp);
 		// printf("Remainder block = %p", bp);
-
-		insert_free((csize - asize), bp);
 		
 		PUT(HDRP(bp), PACK(csize - asize, 0));
 		PUT(FTRP(bp), PACK(csize - asize, 0));
+
+		insert_free((csize - asize), bp);
+
 	} else {
-	    remove_free(bp);
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
 	}
