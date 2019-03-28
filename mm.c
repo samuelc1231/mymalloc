@@ -106,10 +106,8 @@ struct free_block {
 
 /* Global variables: */
 static struct free_block **free_listp; /* Pointer to free list array */ 
-static        char       *heap_listp; /* Pointer to first block after free list array */ 
-
-
-  
+static char *heap_listp; /* Pointer to first block after free list array */ 
+size_t failedsize; /* Last size that needed extension */ 
 
 /* Function prototypes for internal helper routines: */
 static void *coalesce(void *bp);
@@ -329,6 +327,13 @@ mm_malloc(size_t size)
 	//printf("called malloc on block of size %d \n", (int) asize);
 	/* Search the free list for a fit. */
 	// printf("Need Size: %i\n",(int) asize);
+	if (asize == failedsize) {
+		if ((bp = extend_heap(asize / WSIZE)) == NULL) {
+		return (NULL);
+		}
+		place(bp, asize, 0);
+		return (bp);
+	}
 
 	if ((bp = find_fit(asize)) != NULL) {
 		place(bp, asize, 1);
@@ -339,6 +344,7 @@ mm_malloc(size_t size)
 	// printf("ends up here? \n");
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = asize;
+	failedsize = asize;
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL) {
 		return (NULL);
 	}
@@ -365,7 +371,10 @@ mm_free(void *bp)
 
 	/* Free the block. */
 	size = GET_SIZE(HDRP(bp));
-	// printf("called free %p, %i\n", bp, (int) size);
+	
+	if (size == failedsize) {
+		failedsize = 0;
+	}
 
 	// insert_free(size, bp);
     PUT(HDRP(bp), PACK(size, 0));
@@ -423,7 +432,6 @@ mm_realloc(void *ptr, size_t size)
 			
 		// If we are looking for a larger block, expand or relocate.
 		} else if (GET_SIZE(HDRP(NEXT_BLKP(ptr))) == 0) {
-					printf("next block size %i, need to expand\n", (int) GET_SIZE(HDRP(NEXT_BLKP(ptr))));
 
 					extend_heap((asize - oldsize) / WSIZE);
 					PUT(HDRP(ptr), PACK(asize, 1));
