@@ -145,40 +145,38 @@ find_list(size_t size, int bucket_flag)
 		}
 		return 1;
 	} else if (size <= 128) {
+		if (bucket_flag) {
+			return 128;
+		}
 		return 2;
 	} else if (size <= 256) {
+		if (bucket_flag) {
+			return 256;
+		}
 		return 3;
 	} else if (size <= 512) {
+		if (bucket_flag) {
+			return 512;
+		}
 		return 4;
 	} else if (size <= 1024) {
+		if (bucket_flag) {
+			return 1024;
+		}
 		return 5;
 	} else if (size <= 2048) {
+		if (bucket_flag) {
+			return 2048;
+		}
 		return 6;
 	} else if (size <= 4096) {
+		if (bucket_flag) {
+			return 4096;
+		}
 		return 7;
 	} else {
 		return 8;
 	}
-	
-    // unsigned int bucket_size;
-	// int i;
-	// for(i = 0; i < 9; i++) {
-	//         bucket_size  = BUCKET(i);
-	// 		printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
-	// 	if (size <= bucket_size) {
-	// 			// printf("FINDLIST - found i %i ", i + 1);
-	// 			if (bucket_flag) {
-	// 				return bucket_size;
-	// 			} else {
-	// 	        	return i;
-	// 			}
-				
-	// 	}
-	// }
-	// if (bucket_flag) {
-	// 				return BUCKET(9);
-	// 			}
-	// return (9);
         
 };
 
@@ -458,164 +456,64 @@ mm_realloc(void *ptr, size_t size)
 static void * 
 coalesce(void *bp) 
 {
-  //printf("coalescing \n");
 	size_t size = GET_SIZE(HDRP(bp));
-	// printf("about to seg fault prev? \n");
 	bool prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));  
-	//**THIS IS FAILING SOMETIMES?
-	// printf("about to seg fault next? \n");
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp))); 	
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
-	  	// printf("couldn't coalesce \n");
 	  	insert_free(size, bp);
 		return (bp);
-
-	} else {                                      
-		int idx = find_list(size, 0);
-		/*int nbr_idx = find_list(next_size);
-	        int prev_idx = find_list(prev_size);
-		struct free_block *current;
-		struct free_block *first;
-		*/
-		if (prev_alloc && !next_alloc) {        /* Case 2 */  
-		  printf("case 2 \n");
+	} else if (prev_alloc && !next_alloc) {        /* Case 2 */  
 		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 			remove_free(NEXT_BLKP(bp));
 	
 			PUT(HDRP(bp), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-			int new_idx = find_list(size, 0);
-			if (idx != new_idx) {
-			        remove_free(bp);
-				insert_free(size, bp);
-			} 	       
-
-		} else if (!prev_alloc && next_alloc) {         /* Case 3 */
+			
+			insert_free(size, bp);
+	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		//   printf("case 3 \n");
-			size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 
-			// If the size of the coalesced unit worth coalescing, coalesce and reassign
-			if ((int) size > find_list(size, 1)) {
-				// printf("%i, %i", (int) size, find_list(size, 1));
-				remove_free(PREV_BLKP(bp));
-				PUT(FTRP(bp), PACK(size, 0));
-				PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		// If the size of the coalesced unit worth coalescing, coalesce and reassign
+		if ((int) size > find_list(size, 1)) {
+			// printf("%i, %i", (int) size, find_list(size, 1));
+			remove_free(PREV_BLKP(bp));
 
-				bp = PREV_BLKP(bp);
-				insert_free(size, bp);
-			} else {
-				insert_free(size - GET_SIZE(HDRP(PREV_BLKP(bp))) , bp);
-			}
+			PUT(FTRP(bp), PACK(size, 0));
+			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+			bp = PREV_BLKP(bp);
 
-			}
-	
-				/*if (free_listp[new_idx] == NULL) {
-				        free_listp[new_idx] = (struct free_block *) bp;
-				        free_listp[new_idx]-> next = NULL;
-					free_listp[new_idx]->prev = NULL;
-				} else {
-				        //     **ASSUMING SIZES ARE WORKING**
-				        // free_block_first = free_list;
-				        first = (struct free_block *) bp;
-				        first->next = free_listp[new_idx];
-				        first->prev = NULL;
-					free_listp[new_idx]->prev = first;
-					free_listp[new_idx] = first;
-				} 
-				*/
-		 else {                                        /* Case 4 */
+			insert_free(size, bp);
+		} else {
+			insert_free(size - GET_SIZE(HDRP(PREV_BLKP(bp))) , bp);
+		}
+
+	} else {                                        /* Case 4 */
 		//   printf("case 4 \n");
-			size_t prev_size = GET_SIZE(HDRP(PREV_BLKP(bp)));
-		        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
-			  GET_SIZE(FTRP(NEXT_BLKP(bp)));
-		        /*free_listp[idx]->next->prev = NULL;
-		        free_listp[idx] = free_listp[idx]->next;      
-			*/
+			size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
+			GET_SIZE(FTRP(NEXT_BLKP(bp)));
+			
+		if ((int) size > find_list(size, 1)) {
+
 			remove_free(bp);
 			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-			/*for (current = free_listp[nbr_idx]; current !=  NULL; current = 
-			     current->next) {
-			      if (current == (struct free_block *) NEXT_BLKP(bp)) {
-				        // next block is at the head of its 
-					 // free list 
-				        if (current->prev == NULL) {
-					  if (current->next != NULL) {
-					    current->next->prev = NULL;
-					    free_listp[nbr_idx] = current->next;
-					    //current->next = NULL;
-					  }
-					  else {
-					    free_listp[nbr_idx] = NULL;
-					  }
-					  current = NULL;
-					} // next block is at the end of its 
-					 // free list 
-					else if (current->next == NULL) {
-					  current->prev->next = NULL;
-					  current = NULL;
-					} else {
-					  current->prev->next = current->next;
-					  current->next->prev = current->prev;
-					  current = NULL;
-					}
-				}
-			}
-			*/
+		
 			remove_free(NEXT_BLKP(bp));
+			remove_free(PREV_BLKP(bp));
 
-			if (find_list(prev_size, 0) != find_list(size, 0)) {
-			        remove_free(PREV_BLKP(bp));
-			  /*int new_idx = find_list(size);
-				for (current = free_listp[prev_idx]; current !=  NULL; current = 
-				     current->next) {
-				      if (current == (struct free_block *) PREV_BLKP(bp)) {
-					        // prev block was at the head of its 
-						 // free list 
-				                if (current->prev == NULL) {
-						        if (current->next != NULL) {
-							  current->next->prev = NULL;
-							  free_listp[prev_idx] = current->next;
-							  //current->next = NULL;
-							}
-							else {
-							  free_listp[prev_idx] = NULL;
-							}
-							current = NULL;
-						} // prev block was at the end of its 
-						   // free list 
-						else if (current->next == NULL) {
-							current->prev->next = NULL;
-							current = NULL;
-						} else {
-						        current->prev->next = current->next;
-						        current->next->prev = current->prev;
-							current = NULL;
-						}
-					}
-			  */
-			}
-				bp = PREV_BLKP(bp);
-				insert_free(size, bp);
-				/*if (free_listp[new_idx] == NULL) {
-				        free_listp[new_idx] = (struct free_block *) bp;
-				        free_listp[new_idx]-> next = NULL;
-					free_listp[new_idx]->prev = NULL;
-				} else {
-				        //     **ASSUMING SIZES ARE WORKING**
-				        // free_block_first = free_list;
-				        first =  (struct free_block *) bp;
-				        first->next = free_listp[new_idx];
-				        first->prev = NULL;
-					free_listp[new_idx]->prev = first;
-					free_listp[new_idx] = first;
-				} 
-				*/	
+			bp = PREV_BLKP(bp);
+			insert_free(size, bp);
+		} else {
+			bp = PREV_BLKP(bp);
+			insert_free( ( size - GET_SIZE(HDRP(PREV_BLKP(bp))) - 
+			GET_SIZE(FTRP(NEXT_BLKP(bp)))), bp);
 		}
-		//printf("finished coalescing [sucessful] \n");
-		return (bp);
 	}
+		//printf("finished coalescing [sucessful] \n");
+	return (bp);
+	
 }
 
 /* 
