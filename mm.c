@@ -43,6 +43,7 @@ team_t team = {
 #define WSIZE      sizeof(void *) /* Word and header/footer size (bytes) */
 #define DSIZE      (2 * WSIZE)    /* Doubleword size (bytes) */
 #define CHUNKSIZE  (1 << 12)      /* Extend heap by this amount (bytes) */
+#define BUCKET(p)  (unsigned int) (pow(2, p + 4))
 
 #define MAX(x, y)  ((x) > (y) ? (x) : (y))  
 
@@ -139,19 +140,22 @@ find_list(size_t size, int bucket_flag)
 {
     unsigned int bucket_size;
 	int i;
-	for(i = 9; i > 0; i--) {
-	        bucket_size  = (unsigned int) (pow(2, i+4));
-			printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
-		if (size >= bucket_size) {
-				printf("FINDLIST - found i %i ", i + 1);
+	for(i = 0; i < 9; i++) {
+	        bucket_size  = BUCKET(i);
+			// printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
+		if (size <= bucket_size) {
+				// printf("FINDLIST - found i %i ", i + 1);
 				if (bucket_flag) {
-					return (unsigned int) (pow(2, (i + 1) +4));
+					return bucket_size;
 				} else {
-		        	return i + 1;
+		        	return i;
 				}
 				
 		}
 	}
+	if (bucket_flag) {
+					return BUCKET(9);
+				}
 	return (9);
         
 };
@@ -175,11 +179,11 @@ insert_free(size_t asize, void *bp)
 	 *  Insert block at start of  appropriately sized explicit 
 	 *  free list 
 	 */
-        if (free_listp[idx] == NULL) {
+    if (free_listp[idx] == NULL) {
 	        free_listp[idx] = (struct free_block *) bp;
 			free_listp[idx]->next = NULL;
 	        free_listp[idx]->prev = NULL;
-			printf("Inserted into empty list at index %d \n", idx);
+			// printf("Inserted into empty list at index %d \n", idx);
 
         } else {
 	        first = (struct free_block *) bp;
@@ -187,7 +191,7 @@ insert_free(size_t asize, void *bp)
 	        first->prev = NULL;
 			free_listp[idx]->prev = first;
 	        free_listp[idx] = first;	
-			printf("Inserted into non-empty list at index %d \n", idx);
+			// printf("Inserted into non-empty list at index %d \n", idx);
        
 	}
         //printf("inserted block of size = %d \n", (int) asize);
@@ -207,37 +211,34 @@ insert_free(size_t asize, void *bp)
 void
 remove_free(void *bp) 
 {
-  printf("called remove \n");
+//   printf("called remove \n");
 
+	size_t size = GET_SIZE(HDRP(bp));
+	int list = find_list(size,0);
 	struct free_block *current = (struct free_block *) bp;
 
-	printf("block to be removed size: %i", (int) GET_SIZE(HDRP(current)));
-	printf("block to be removed list: %i", (int) find_list(GET_SIZE(HDRP(current)), 0));
+	// printf("block to be removed size: %i", (int) GET_SIZE(HDRP(current)));
+	// printf("block to be removed list: %i", (int) find_list(GET_SIZE(HDRP(current)), 0));
 
-	
+	// If block is at front of free list. 
 	if (current->prev == NULL) {
-		printf("front\n");
+		// printf("front\n");
 		if (current->next != NULL) {
-			current->next->prev = NULL;
+			current->next->prev = NULL;	
+			free_listp[list] = current->next;	
+			return;
 		} else {
-			current = NULL;
-
-
+			free_listp[list] = NULL;
 			return;
 		}
-		return;
-
 	}
  /* free block was at the end of its 
 			   * free list */
 	else if (current->next == NULL) {
-		printf("back\n");
-
+		// printf("back\n");
 		current->prev->next = NULL;
-		return;
 	} else {
-		printf("mid\n");
-
+		// printf("mid\n");
 		current->prev->next = current->next;
 		current->next->prev = current->prev;
 		//current = NULL;
@@ -264,7 +265,7 @@ remove_free(void *bp)
 int
 mm_init(void) 
 {
-	printf("START______________________\n");
+	// printf("START______________________\n");
 		/* Create the initial empty heap. */
 	if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1)
 		return (-1);
@@ -328,15 +329,15 @@ mm_malloc(size_t size)
 
 	//printf("called malloc on block of size %d \n", (int) asize);
 	/* Search the free list for a fit. */
-	printf("Need Size: %i\n",(int) asize);
+	// printf("Need Size: %i\n",(int) asize);
 
 	if ((bp = find_fit(asize)) != NULL) {
 		place(bp, asize);
-		printf("malloced pointer %p, %i \n", bp, (int) asize);
+		// printf("malloced pointer %p, %i \n", bp, (int) asize);
 		return (bp);
 	}
 
-	printf("ends up here? \n");
+	// printf("ends up here? \n");
 	/* No fit found.  Get more memory and place the block. */
 	extendsize = MAX(asize, CHUNKSIZE);
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL) {
@@ -365,28 +366,10 @@ mm_free(void *bp)
 
 	/* Free the block. */
 	size = GET_SIZE(HDRP(bp));
-	printf("called free %p, %i\n", bp, (int) size);
+	// printf("called free %p, %i\n", bp, (int) size);
 
 	insert_free(size, bp);
-	//int idx = find_list(size); 
-	
-	/* 
-	 *  Insert block at start of  appropriately sized explicit 
-	 *  free list 
-	 */
-        /* if (free_listp[idx] == NULL) {
-	        free_listp[idx] = (struct free_block *) bp;
-		free_listp[idx]->next = NULL;
-	        free_listp[idx]->prev = NULL;
-        } else {
-	        first = (struct free_block *) bp;
-                first->next = free_listp[idx];
-	        first->prev = NULL;
-		free_listp[idx]->prev = first;
-	        free_listp[idx] = first;	       
-	}
-	*/
-        PUT(HDRP(bp), PACK(size, 0));
+    PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
 	//coalesce(bp); //***?????
 }
@@ -455,14 +438,14 @@ coalesce(void *bp)
 {
   //printf("coalescing \n");
 	size_t size = GET_SIZE(HDRP(bp));
-	printf("about to seg fault prev? \n");
+	// printf("about to seg fault prev? \n");
 	bool prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));  
 	//**THIS IS FAILING SOMETIMES?
-	printf("about to seg fault next? \n");
+	// printf("about to seg fault next? \n");
 	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp))); 	
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
-	  	printf("couldn't coalesce \n");
+	  	// printf("couldn't coalesce \n");
 	  	insert_free(size, bp);
 		return (bp);
 
@@ -477,64 +460,22 @@ coalesce(void *bp)
 		  printf("case 2 \n");
 		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 			remove_free(NEXT_BLKP(bp));
-			/*for (current = free_listp[nbr_idx]; current !=  NULL; 
-			     current =  current->next) {
-			  if (current == (struct free_block *) NEXT_BLKP(bp)) { //need to cast??
-				        // next block is at the head of its 
-			    //free list 
-				      if (current == free_listp[nbr_idx]) {
-					  if (current->next != NULL) {
-					    current->next->prev = NULL;
-					    free_listp[nbr_idx] = current->next;
-					    //current->next = NULL;
-					  }
-					  else {
-					          free_listp[nbr_idx] = NULL;
-					  }
-					  current = NULL;
-					} // next block is at the end of its 
-				      //free list 
-					else if (current->next == NULL) {
-					  current->prev->next = NULL;
-					  current = NULL;
-					} else {
-					  current->prev->next = current->next;
-					  current->next->prev = current->prev;
-					  current = NULL;
-					}
-				}
-			}
-			*/
+	
 			PUT(HDRP(bp), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
 			int new_idx = find_list(size, 0);
 			if (idx != new_idx) {
 			        remove_free(bp);
 				insert_free(size, bp);
-				/*free_listp[idx]-> next->prev = NULL;
-				free_listp[idx] = free_listp[idx]->next;
-				if (free_listp[new_idx] == NULL) {
-				        free_listp[new_idx] = 
-					  (struct free_block *) bp;
-					free_listp[new_idx]-> next = NULL;
-					free_listp[new_idx]->prev = NULL;
-				} else {
-				        first = (struct free_block *) bp;
-					first->next = free_listp[new_idx];
-				        first->prev = NULL;
-					free_listp[new_idx]->prev = first;
-					free_listp[new_idx] = first;
-				} 
-				*/
 			} 	       
 
 		} else if (!prev_alloc && next_alloc) {         /* Case 3 */
-		  printf("case 3 \n");
+		//   printf("case 3 \n");
 			size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 
 			// If the size of the coalesced unit worth coalescing, coalesce and reassign
 			if ((int) size > find_list(size, 1)) {
-				printf("%i, %i", (int) size, find_list(size, 1));
+				// printf("%i, %i", (int) size, find_list(size, 1));
 				remove_free(PREV_BLKP(bp));
 				PUT(FTRP(bp), PACK(size, 0));
 				PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -562,7 +503,7 @@ coalesce(void *bp)
 				} 
 				*/
 		 else {                                        /* Case 4 */
-		  printf("case 4 \n");
+		//   printf("case 4 \n");
 			size_t prev_size = GET_SIZE(HDRP(PREV_BLKP(bp)));
 		        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 			  GET_SIZE(FTRP(NEXT_BLKP(bp)));
@@ -674,31 +615,14 @@ extend_heap(size_t words)
 	size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
 	if ((bp = mem_sbrk(size)) == (void *)-1)  
 		return (NULL);
-	printf("extending with block of size %d \n", (int) size);
+	// printf("extending with block of size %d \n", (int) size);
 	/* Initialize free block header/footer and the epilogue header. */
  	PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
 	PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
 	PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
-	
-	/*int idx = find_list(size);
-	if (free_listp[idx] == NULL) {
- 	        free_listp[idx] = (struct free_block *) bp;
-		free_listp[idx]->next = NULL;
-		free_listp[idx]->prev = NULL;
-	}
-	else {
-	        first = (struct free_block *) bp;
-	        first->next = free_listp[idx];
-	        first->prev = NULL;
-		free_listp[idx]->prev = first;
-		free_listp[idx] = first;
-	}
-	*/
 
 	/* Coalesce if the previous block was free. */
-	coalesce(bp);
-
-	return bp;
+	return coalesce(bp);
 }
 
 /*
@@ -715,7 +639,7 @@ find_fit(size_t asize)
   //printf("called find fit on block of size %d \n", (int) asize);
   //void *bp;
     struct free_block *current;
-	printf("FIND FIT\n");
+	// printf("FIND FIT\n");
 	int idx = find_list(asize, 0);
 
 	// What if a free list is empty? 
@@ -725,13 +649,12 @@ find_fit(size_t asize)
 
 	/* Search for the first fit. */
 	while (idx < 10) {
-	        for (current = free_listp[idx]; current !=  NULL; current = 
-		        current->next) {
+	        for (current = free_listp[idx]; current !=  NULL; current = current->next) {
 		        unsigned int bp_size = GET_SIZE(HDRP(current));
-				printf("searching list at index = %d, current block size = %d  \n", idx, bp_size);
+				// printf("searching list at index = %d, current block size = %d, current block = %p  \n", idx, bp_size, current);
 		        if (bp_size >= asize && !GET_ALLOC(HDRP(current))) {
 			  //bp = &current; //???
-			  printf("found in list \n");
+			//   printf("found in list \n");
 			  return((void *)current);
 			}
 	        
@@ -755,22 +678,25 @@ find_fit(size_t asize)
 static void
 place(void *bp, size_t asize)
 {
-  printf("called place \n");
+//   printf("called place \n");
 	size_t csize = GET_SIZE(HDRP(bp)); 
 
 	if ((csize - asize) >= (2 * DSIZE)) { 
 	  //struct free_block *first;
-	  	printf("splitting with size %i\n", (int) csize);
+	  	// printf("splitting with size %i\n", (int) csize);
 	    remove_free(bp);
+		// printf("Inserted block = %p", bp);
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		bp = NEXT_BLKP(bp);
-		insert_free((csize - asize), bp);
+		// printf("Remainder block = %p", bp);
 
+		insert_free((csize - asize), bp);
+		
 		PUT(HDRP(bp), PACK(csize - asize, 0));
 		PUT(FTRP(bp), PACK(csize - asize, 0));
 	} else {
-	        remove_free(bp);
+	    remove_free(bp);
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
 	}
