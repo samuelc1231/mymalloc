@@ -388,9 +388,19 @@ mm_free(void *bp)
  */
 void *
 mm_realloc(void *ptr, size_t size)
-{
+{	
+	// size_t expandsize;
 	size_t oldsize;
 	void *newptr;
+	// struct free_block *current;
+
+	newptr = ptr;
+	oldsize = GET_SIZE(HDRP(ptr));
+	// expandsize = oldsize;
+
+	printf("size: %i\n", (int) size);
+	printf("oldsize: %i\n", (int) oldsize);
+	printf("pointer: %p", ptr);
 
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0) {
@@ -399,25 +409,80 @@ mm_realloc(void *ptr, size_t size)
 	}
 
 	/* If oldptr is NULL, then this is just malloc. */
-	if (ptr == NULL)
+	if (ptr == NULL) {
 		return (mm_malloc(size));
+	// If not, we're going to look for a (opt) new home for our block. 
+	} else { 
+		// If we are looking for a smaller size, split or stay.
+		if (size <= oldsize) {
+			void *next_ptr;
+			printf("smaller unit");
+			// Made payload smaller, take internal fragmentation
+			PUT(HDRP(ptr), PACK(size, 1));
+			PUT(FTRP(ptr), PACK(size, 1));
+			if ((oldsize - size) >= (2 * DSIZE)) {
+				next_ptr = NEXT_BLKP(ptr);
+				insert_free((oldsize - size), next_ptr);
+				
+				PUT(HDRP(next_ptr), PACK(oldsize - size, 0));
+				PUT(FTRP(next_ptr), PACK(oldsize - size, 0));
+			}
+			
+		// If we are looking for a larger block, expand or relocate.
+		} else {
+			// current = ptr;
+			// while (current->next != NULL) {
+			// 	expandsize += GET_SIZE(HDRP(current)); 
+			// 	if (expandsize >= size) {
+			// 		PUT(HDRP(ptr), PACK(size, 1));
+			// 		PUT(FTRP(ptr), PACK(size, 1));
+			// 	}
+			// }
+			printf("larger unit\n");
 
-	newptr = mm_malloc(size);
+			if (NEXT_BLKP(ptr) != NULL && !GET_ALLOC(HDRP(NEXT_BLKP(ptr)))) {
+				printf("getting here\n");
+				printf("combined size %i\n", (int) (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr)))));
 
-	/* If realloc() fails the original block is left untouched  */
-	if (newptr == NULL)
-		return (NULL);
+				if (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr))) >= size) {
+					printf("combined size %i", (int) (oldsize + GET_SIZE(HDRP(NEXT_BLKP(ptr)))));
+					PUT(HDRP(ptr), PACK(size, 1));
+					PUT(FTRP(ptr), PACK(size, 1));
+				} 
+			} else {
+				printf("need to move\n");
+				newptr = mm_malloc(size);
+				if (size < oldsize)
+					oldsize = size;
+				memcpy(newptr, ptr, oldsize);
+				mm_free(ptr);
+				printf("new pointer! %p\n", newptr);
+				return (newptr);
 
-	/* Copy the old data. */
-	oldsize = GET_SIZE(HDRP(ptr));
-	if (size < oldsize)
-		oldsize = size;
-	memcpy(newptr, ptr, oldsize);
+			}
+			
+		}
 
-	/* Free the old block. */
-	mm_free(ptr);
+	}
+return (newptr);
+	
 
-	return (newptr);
+	// newptr = mm_malloc(size);
+
+	// /* If realloc() fails the original block is left untouched  */
+	// if (newptr == NULL)
+	// 	return (NULL);
+
+	// /* Copy the old data. */
+	// oldsize = GET_SIZE(HDRP(ptr));
+	// if (size < oldsize)
+	// 	oldsize = size;
+	// memcpy(newptr, ptr, oldsize);
+
+	// /* Free the old block. */
+	// mm_free(ptr);
+
+	// return (newptr);
 };
 
 /*
