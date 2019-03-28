@@ -137,26 +137,48 @@ static void printblock(void *bp);
  */
 int
 find_list(size_t size, int bucket_flag)
-{
-    unsigned int bucket_size;
-	int i;
-	for(i = 0; i < 9; i++) {
-	        bucket_size  = BUCKET(i);
-			// printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
-		if (size <= bucket_size) {
-				// printf("FINDLIST - found i %i ", i + 1);
-				if (bucket_flag) {
-					return bucket_size;
-				} else {
-		        	return i;
-				}
-				
+{	
+
+	if (size <= 64) {
+		if (bucket_flag) {
+			return 64;
 		}
+		return 1;
+	} else if (size <= 128) {
+		return 2;
+	} else if (size <= 256) {
+		return 3;
+	} else if (size <= 512) {
+		return 4;
+	} else if (size <= 1024) {
+		return 5;
+	} else if (size <= 2048) {
+		return 6;
+	} else if (size <= 4096) {
+		return 7;
+	} else {
+		return 8;
 	}
-	if (bucket_flag) {
-					return BUCKET(9);
-				}
-	return (9);
+	
+    // unsigned int bucket_size;
+	// int i;
+	// for(i = 0; i < 9; i++) {
+	//         bucket_size  = BUCKET(i);
+	// 		printf("bucket size: %u, size: %i\n", bucket_size, (int) size);
+	// 	if (size <= bucket_size) {
+	// 			// printf("FINDLIST - found i %i ", i + 1);
+	// 			if (bucket_flag) {
+	// 				return bucket_size;
+	// 			} else {
+	// 	        	return i;
+	// 			}
+				
+	// 	}
+	// }
+	// if (bucket_flag) {
+	// 				return BUCKET(9);
+	// 			}
+	// return (9);
         
 };
 
