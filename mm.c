@@ -140,23 +140,21 @@ find_list(size_t size)
 {	
 
 	if (size <= 64) {
-		return 1;
+		return 0;
 	} else if (size <= 128) {
-		return 2;
+		return 1;
 	} else if (size <= 256) {
-		return 3;
+		return 2;
 	} else if (size <= 512) {
-		return 4;
+		return 3;
 	} else if (size <= 1024) {
-
-		return 5;
+		return 4;
 	} else if (size <= 2048) {
-	
-		return 6;
+		return 5;
 	} else if (size <= 4096) {
-		return 7;
+		return 6;
 	} else {
-		return 8;
+		return 7;
 	}
         
 };
@@ -278,18 +276,18 @@ mm_init(void)
 
 	
 	void *startp;
-    if ((startp = mem_sbrk(12 * sizeof(struct free_block *) )) == (void *)-1)
+    if ((startp = mem_sbrk(10 * sizeof(struct free_block *) )) == (void *)-1)
 		return (-1);
 	
 	// set header and footer 
-	PUT(HDRP(startp), PACK(12 * WSIZE , 1));
-	PUT(FTRP(startp), PACK(12 * WSIZE , 1));
+	PUT(HDRP(startp), PACK(10 * WSIZE , 1));
+	PUT(FTRP(startp), PACK(10 * WSIZE , 1));
 	PUT(NEXT_BLKP(startp), PACK(0, 1));     /* Epilogue header */
 
 	struct free_block *first_list = (struct free_block *) startp;
 	free_listp = (struct free_block **) first_list;
 	int i; 
-	for (i = 0; i < 10; i++) {
+	for (i = 0; i < 8; i++) {
 		free_listp[i] = NULL;
 	}
 	
@@ -340,7 +338,7 @@ mm_malloc(size_t size)
 
 	// printf("ends up here? \n");
 	/* No fit found.  Get more memory and place the block. */
-	extendsize = MAX(asize, CHUNKSIZE);
+	extendsize = asize;
 	if ((bp = extend_heap(extendsize / WSIZE)) == NULL) {
 		return (NULL);
 	}
@@ -369,10 +367,10 @@ mm_free(void *bp)
 	size = GET_SIZE(HDRP(bp));
 	// printf("called free %p, %i\n", bp, (int) size);
 
-	insert_free(size, bp);
+	// insert_free(size, bp);
     PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
-	//coalesce(bp); //***?????
+	coalesce(bp); //***?????
 }
 
 /*
@@ -439,26 +437,29 @@ coalesce(void *bp)
 {
 	size_t size = GET_SIZE(HDRP(bp));
 	bool prev_alloc = GET_ALLOC(HDRP(PREV_BLKP(bp)));  
-	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp))); 	
+	bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp))); 
+		
 
 	if (prev_alloc && next_alloc) {                 /* Case 1 */
 	  	insert_free(size, bp);
 		return (bp);
 	} else if (prev_alloc && !next_alloc) {        /* Case 2 */  
-		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 			remove_free(NEXT_BLKP(bp));
+
+		    size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 	
 			PUT(HDRP(bp), PACK(size, 0));
-			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+			PUT(FTRP(bp), PACK(size, 0));
 			
 			insert_free(size, bp);
 	} else if (!prev_alloc && next_alloc) {         /* Case 3 */
 		//   printf("case 3 \n");
+		remove_free(PREV_BLKP(bp));
+
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 
 		// If the size of the coalesced unit worth coalescing, coalesce and reassign
 
-			remove_free(PREV_BLKP(bp));
 
 			PUT(FTRP(bp), PACK(size, 0));
 			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
@@ -468,15 +469,14 @@ coalesce(void *bp)
 
 	} else {                                        /* Case 4 */
 		//   printf("case 4 \n");
+			remove_free(NEXT_BLKP(bp));
+			remove_free(PREV_BLKP(bp));
 			size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 			GET_SIZE(FTRP(NEXT_BLKP(bp)));
 			
-			remove_free(bp);
 			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
 		
-			remove_free(NEXT_BLKP(bp));
-			remove_free(PREV_BLKP(bp));
 
 			bp = PREV_BLKP(bp);
 			insert_free(size, bp);
@@ -539,11 +539,11 @@ find_fit(size_t asize)
 	// }
 
 	/* Search for the first fit. */
-	while (idx < 10) {
+	while (idx < 8) {
 	        for (current = free_listp[idx]; current !=  NULL; current = current->next) {
 		        unsigned int bp_size = GET_SIZE(HDRP(current));
 				// printf("searching list at index = %d, current block size = %d, current block = %p  \n", idx, bp_size, current);
-		        if (bp_size >= asize && !GET_ALLOC(HDRP(current))) {
+		        if (bp_size >= asize) {
 			  //bp = &current; //???
 			//   printf("found in list \n");
 			  return((void *)current);
