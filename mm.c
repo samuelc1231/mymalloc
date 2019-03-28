@@ -136,43 +136,24 @@ static void printblock(void *bp);
  *    pointer to this list
  */
 int
-find_list(size_t size, int bucket_flag)
+find_list(size_t size)
 {	
 
 	if (size <= 64) {
-		if (bucket_flag) {
-			return 64;
-		}
 		return 1;
 	} else if (size <= 128) {
-		if (bucket_flag) {
-			return 128;
-		}
 		return 2;
 	} else if (size <= 256) {
-		if (bucket_flag) {
-			return 256;
-		}
 		return 3;
 	} else if (size <= 512) {
-		if (bucket_flag) {
-			return 512;
-		}
 		return 4;
 	} else if (size <= 1024) {
-		if (bucket_flag) {
-			return 1024;
-		}
+
 		return 5;
 	} else if (size <= 2048) {
-		if (bucket_flag) {
-			return 2048;
-		}
+	
 		return 6;
 	} else if (size <= 4096) {
-		if (bucket_flag) {
-			return 4096;
-		}
 		return 7;
 	} else {
 		return 8;
@@ -193,7 +174,7 @@ void
 insert_free(size_t asize, void *bp) 
 {
         struct free_block *first;
-        int idx = find_list(asize, 0); 
+        int idx = find_list(asize); 
 	//printf("called insert on block of size = %d, index = %d \n", idx, (int) asize);
 	/* 
 	 *  Insert block at start of  appropriately sized explicit 
@@ -234,7 +215,7 @@ remove_free(void *bp)
 //   printf("called remove \n");
 
 	size_t size = GET_SIZE(HDRP(bp));
-	int list = find_list(size,0);
+	int list = find_list(size);
 	struct free_block *current = (struct free_block *) bp;
 
 	// printf("block to be removed size: %i", (int) GET_SIZE(HDRP(current)));
@@ -476,8 +457,7 @@ coalesce(void *bp)
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 
 		// If the size of the coalesced unit worth coalescing, coalesce and reassign
-		if ((int) size > find_list(size, 1)) {
-			// printf("%i, %i", (int) size, find_list(size, 1));
+
 			remove_free(PREV_BLKP(bp));
 
 			PUT(FTRP(bp), PACK(size, 0));
@@ -485,17 +465,12 @@ coalesce(void *bp)
 			bp = PREV_BLKP(bp);
 
 			insert_free(size, bp);
-		} else {
-			insert_free(size - GET_SIZE(HDRP(PREV_BLKP(bp))) , bp);
-		}
 
 	} else {                                        /* Case 4 */
 		//   printf("case 4 \n");
 			size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
 			GET_SIZE(FTRP(NEXT_BLKP(bp)));
 			
-		if ((int) size > find_list(size, 1)) {
-
 			remove_free(bp);
 			PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 			PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
@@ -505,11 +480,7 @@ coalesce(void *bp)
 
 			bp = PREV_BLKP(bp);
 			insert_free(size, bp);
-		} else {
-			bp = PREV_BLKP(bp);
-			insert_free( ( size - GET_SIZE(HDRP(PREV_BLKP(bp))) - 
-			GET_SIZE(FTRP(NEXT_BLKP(bp)))), bp);
-		}
+		
 	}
 		//printf("finished coalescing [sucessful] \n");
 	return (bp);
@@ -560,7 +531,7 @@ find_fit(size_t asize)
   //void *bp;
     struct free_block *current;
 	// printf("FIND FIT\n");
-	int idx = find_list(asize, 0);
+	int idx = find_list(asize);
 
 	// What if a free list is empty? 
 	// if (free_listp[idx] == NULL) {
